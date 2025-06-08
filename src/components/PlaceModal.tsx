@@ -42,7 +42,11 @@ const PlaceModal = ({ place, isOpen, onClose }: PlaceModalProps) => {
 
     setLoadingAttraction(attraction);
     try {
-      const results = await ImageService.searchPlaces(`${attraction} ${place.name} ${place.country}`);
+      // Create a more specific search query for better image relevance
+      const searchQuery = `${attraction} in ${place.name} ${place.country} landmark tourist attraction`;
+      console.log('Searching for attraction images with query:', searchQuery);
+      
+      const results = await ImageService.searchPlaces(searchQuery);
       if (results.length > 0 && results[0].images) {
         setAttractionImages(prev => ({
           ...prev,
@@ -186,6 +190,8 @@ const PlaceModal = ({ place, isOpen, onClose }: PlaceModalProps) => {
           attraction={selectedAttraction}
           images={attractionImages[selectedAttraction]}
           onClose={closeAttractionGallery}
+          placeName={place.name}
+          country={place.country}
         />
       )}
     </div>
@@ -196,9 +202,11 @@ interface AttractionGalleryProps {
   attraction: string;
   images: string[];
   onClose: () => void;
+  placeName: string;
+  country: string;
 }
 
-const AttractionGallery = ({ attraction, images, onClose }: AttractionGalleryProps) => {
+const AttractionGallery = ({ attraction, images, onClose, placeName, country }: AttractionGalleryProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const nextImage = () => {
@@ -222,7 +230,7 @@ const AttractionGallery = ({ attraction, images, onClose }: AttractionGalleryPro
         <div className="relative h-96 overflow-hidden">
           <img
             src={images[currentIndex]}
-            alt={`${attraction} ${currentIndex + 1}`}
+            alt={`${attraction} in ${placeName}, ${country}`}
             className="w-full h-full object-cover"
           />
           
@@ -249,6 +257,7 @@ const AttractionGallery = ({ attraction, images, onClose }: AttractionGalleryPro
           
           <div className="absolute bottom-6 left-6 text-white">
             <h2 className="text-3xl font-bold">{attraction}</h2>
+            <p className="text-lg opacity-90">{placeName}, {country}</p>
           </div>
         </div>
 
