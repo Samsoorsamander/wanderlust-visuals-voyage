@@ -5,14 +5,23 @@ import PlaceGrid from '../components/PlaceGrid';
 import PlaceModal from '../components/PlaceModal';
 import { places } from '../data/places';
 import { Place } from '../types/place';
+import { ImageService } from '../services/imageService';
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [originalQuery, setOriginalQuery] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [searchResults, setSearchResults] = useState<Place[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const filteredPlaces = useMemo(() => {
-    if (!searchQuery.trim()) return places;
-    
+  const displayPlaces = useMemo(() => {
+    if (searchQuery.trim() && searchResults.length > 0) {
+      return searchResults;
+    }
+    if (!searchQuery.trim()) {
+      return places;
+    }
+    // Fallback to original filtering if no search results
     const query = searchQuery.toLowerCase();
     return places.filter(
       place =>
@@ -24,10 +33,32 @@ const Index = () => {
           attraction.toLowerCase().includes(query)
         )
     );
-  }, [searchQuery]);
+  }, [searchQuery, searchResults]);
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
+  const handleSearch = async (query: string) => {
+    console.log('Search initiated for:', query);
+    setOriginalQuery(query);
+    
+    // Apply spell correction
+    const correctedQuery = ImageService.correctSpelling(query);
+    setSearchQuery(correctedQuery);
+    
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const results = await ImageService.searchPlaces(correctedQuery);
+      console.log('Search results:', results);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search failed:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handlePlaceClick = (place: Place) => {
@@ -37,6 +68,8 @@ const Index = () => {
   const handleCloseModal = () => {
     setSelectedPlace(null);
   };
+
+  const isSpellCorrected = originalQuery && originalQuery.toLowerCase() !== searchQuery.toLowerCase();
 
   return (
     <div className="min-h-screen">
@@ -49,15 +82,34 @@ const Index = () => {
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 animate-fade-in">
               {searchQuery ? 'Search Results' : 'Discover Amazing Places'}
             </h2>
-            <p className="text-xl text-white/80 max-w-2xl mx-auto animate-fade-in">
-              {searchQuery 
-                ? `Found ${filteredPlaces.length} place${filteredPlaces.length !== 1 ? 's' : ''} matching "${searchQuery}"`
-                : 'Explore breathtaking destinations from around the globe'
-              }
-            </p>
+            <div className="text-xl text-white/80 max-w-2xl mx-auto animate-fade-in">
+              {isSearching ? (
+                <p>Searching for beautiful places...</p>
+              ) : searchQuery ? (
+                <div>
+                  {isSpellCorrected && (
+                    <p className="text-yellow-300 mb-2">
+                      Did you mean "{searchQuery}"? Showing results for the corrected spelling.
+                    </p>
+                  )}
+                  <p>
+                    Found {displayPlaces.length} place{displayPlaces.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                  </p>
+                </div>
+              ) : (
+                <p>Explore breathtaking destinations from around the globe</p>
+              )}
+            </div>
           </div>
 
-          <PlaceGrid places={filteredPlaces} onPlaceClick={handlePlaceClick} />
+          {isSearching ? (
+            <div className="text-center py-16">
+              <div className="animate-spin w-16 h-16 border-4 border-white/20 border-t-white rounded-full mx-auto mb-4"></div>
+              <p className="text-white/70">Loading beautiful places...</p>
+            </div>
+          ) : (
+            <PlaceGrid places={displayPlaces} onPlaceClick={handlePlaceClick} />
+          )}
         </div>
       </section>
 

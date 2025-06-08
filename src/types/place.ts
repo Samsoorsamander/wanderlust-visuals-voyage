@@ -5,7 +5,8 @@ export interface Place {
   country: string;
   description: string;
   longDescription: string;
-  image: string;
+  image?: string; // Keep for backward compatibility
+  images?: string[]; // New field for multiple images
   category: 'mountain' | 'beach' | 'city' | 'forest' | 'desert' | 'island';
   coordinates: {
     lat: number;
