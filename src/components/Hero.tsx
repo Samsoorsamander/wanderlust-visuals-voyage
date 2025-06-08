@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import { places } from '../data/places';
+import { ImageService } from '../services/imageService';
+import SearchSuggestions from './SearchSuggestions';
 
 interface HeroProps {
   onSearch: (query: string) => void;
@@ -10,6 +12,7 @@ interface HeroProps {
 const Hero = ({ onSearch }: HeroProps) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -21,7 +24,35 @@ const Hero = ({ onSearch }: HeroProps) => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch(searchQuery);
+    if (searchQuery.trim()) {
+      const correctedQuery = ImageService.correctSpelling(searchQuery);
+      console.log('Search query corrected from:', searchQuery, 'to:', correctedQuery);
+      onSearch(correctedQuery);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setSearchQuery(suggestion);
+    onSearch(suggestion);
+    setShowSuggestions(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    setShowSuggestions(value.length >= 2);
+  };
+
+  const handleInputFocus = () => {
+    if (searchQuery.length >= 2) {
+      setShowSuggestions(true);
+    }
+  };
+
+  const handleInputBlur = () => {
+    // Delay hiding suggestions to allow clicking on them
+    setTimeout(() => setShowSuggestions(false), 200);
   };
 
   const currentPlace = places[currentImageIndex];
@@ -53,12 +84,14 @@ const Hero = ({ onSearch }: HeroProps) => {
         </div>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="w-full max-w-2xl mb-8">
+        <form onSubmit={handleSearch} className="w-full max-w-2xl mb-8 relative">
           <div className="relative glass-morphism rounded-full p-2">
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleInputChange}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
               placeholder="Search for beautiful places around the world..."
               className="w-full bg-transparent text-white placeholder-white/70 px-6 py-4 rounded-full focus:outline-none text-lg"
             />
@@ -69,6 +102,13 @@ const Hero = ({ onSearch }: HeroProps) => {
               <Search className="w-6 h-6" />
             </button>
           </div>
+
+          {/* Search Suggestions */}
+          <SearchSuggestions
+            query={searchQuery}
+            onSuggestionClick={handleSuggestionClick}
+            isVisible={showSuggestions}
+          />
         </form>
 
         {/* Image Indicators */}

@@ -9,6 +9,7 @@ import { ImageService } from '../services/imageService';
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [originalQuery, setOriginalQuery] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [searchResults, setSearchResults] = useState<Place[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -36,7 +37,11 @@ const Index = () => {
 
   const handleSearch = async (query: string) => {
     console.log('Search initiated for:', query);
-    setSearchQuery(query);
+    setOriginalQuery(query);
+    
+    // Apply spell correction
+    const correctedQuery = ImageService.correctSpelling(query);
+    setSearchQuery(correctedQuery);
     
     if (!query.trim()) {
       setSearchResults([]);
@@ -45,7 +50,7 @@ const Index = () => {
 
     setIsSearching(true);
     try {
-      const results = await ImageService.searchPlaces(query);
+      const results = await ImageService.searchPlaces(correctedQuery);
       console.log('Search results:', results);
       setSearchResults(results);
     } catch (error) {
@@ -64,6 +69,8 @@ const Index = () => {
     setSelectedPlace(null);
   };
 
+  const isSpellCorrected = originalQuery && originalQuery.toLowerCase() !== searchQuery.toLowerCase();
+
   return (
     <div className="min-h-screen">
       <Hero onSearch={handleSearch} />
@@ -75,14 +82,24 @@ const Index = () => {
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 animate-fade-in">
               {searchQuery ? 'Search Results' : 'Discover Amazing Places'}
             </h2>
-            <p className="text-xl text-white/80 max-w-2xl mx-auto animate-fade-in">
-              {isSearching 
-                ? 'Searching for beautiful places...'
-                : searchQuery 
-                  ? `Found ${displayPlaces.length} place${displayPlaces.length !== 1 ? 's' : ''} matching "${searchQuery}"`
-                  : 'Explore breathtaking destinations from around the globe'
-              }
-            </p>
+            <div className="text-xl text-white/80 max-w-2xl mx-auto animate-fade-in">
+              {isSearching ? (
+                <p>Searching for beautiful places...</p>
+              ) : searchQuery ? (
+                <div>
+                  {isSpellCorrected && (
+                    <p className="text-yellow-300 mb-2">
+                      Did you mean "{searchQuery}"? Showing results for the corrected spelling.
+                    </p>
+                  )}
+                  <p>
+                    Found {displayPlaces.length} place{displayPlaces.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                  </p>
+                </div>
+              ) : (
+                <p>Explore breathtaking destinations from around the globe</p>
+              )}
+            </div>
           </div>
 
           {isSearching ? (
