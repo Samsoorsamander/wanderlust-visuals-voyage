@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { X, ChevronLeft, ChevronRight, Image } from 'lucide-react';
 import { Place } from '../types/place';
@@ -42,20 +41,39 @@ const PlaceModal = ({ place, isOpen, onClose }: PlaceModalProps) => {
 
     setLoadingAttraction(attraction);
     try {
-      // Create a more specific search query for better image relevance
-      const searchQuery = `${attraction} in ${place.name} ${place.country} landmark tourist attraction`;
+      // Create a more specific search query for better image relevance using Bing API
+      const searchQuery = `${attraction} ${place.name} ${place.country} landmark tourist attraction`;
       console.log('Searching for attraction images with query:', searchQuery);
       
-      const results = await ImageService.searchPlaces(searchQuery);
-      if (results.length > 0 && results[0].images) {
+      const images = await ImageService.searchBingImages(searchQuery, 8);
+      if (images.length > 0) {
         setAttractionImages(prev => ({
           ...prev,
-          [attraction]: results[0].images!
+          [attraction]: images
+        }));
+        setSelectedAttraction(attraction);
+      } else {
+        // Fallback to generating placeholder images if Bing API fails
+        const fallbackImages = Array.from({ length: 5 }, (_, i) => 
+          `https://picsum.photos/800/600?random=${attraction.length + i}&sig=${attraction}`
+        );
+        setAttractionImages(prev => ({
+          ...prev,
+          [attraction]: fallbackImages
         }));
         setSelectedAttraction(attraction);
       }
     } catch (error) {
       console.error('Failed to fetch attraction images:', error);
+      // Fallback to placeholder images
+      const fallbackImages = Array.from({ length: 5 }, (_, i) => 
+        `https://picsum.photos/800/600?random=${attraction.length + i}&sig=${attraction}`
+      );
+      setAttractionImages(prev => ({
+        ...prev,
+        [attraction]: fallbackImages
+      }));
+      setSelectedAttraction(attraction);
     } finally {
       setLoadingAttraction(null);
     }

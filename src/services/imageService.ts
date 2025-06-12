@@ -1,4 +1,3 @@
-
 interface SearchResult {
   id: string;
   name: string;
@@ -15,15 +14,24 @@ interface SearchResult {
   attractions: string[];
 }
 
-interface SearchSuggestion {
-  query: string;
-  corrected: string;
+interface BingImageResult {
+  thumbnailUrl: string;
+  contentUrl: string;
+  hostPageUrl: string;
+  name: string;
+}
+
+interface BingWebResult {
+  name: string;
+  snippet: string;
+  url: string;
 }
 
 export class ImageService {
-  // Using Unsplash API for better reliability and higher quality images
-  private static readonly UNSPLASH_ACCESS_KEY = 'ZmcW8vmpfLmpB2KTY9eaS-8OYhO3hKpTlLUCcJV3q2U';
-  private static readonly UNSPLASH_BASE_URL = 'https://api.unsplash.com/search/photos';
+  // Microsoft Bing Search API - Free tier endpoint
+  private static readonly BING_SEARCH_KEY = 'YOUR_BING_API_KEY_HERE'; // User needs to replace this
+  private static readonly BING_IMAGE_SEARCH_URL = 'https://api.bing.microsoft.com/v7.0/images/search';
+  private static readonly BING_WEB_SEARCH_URL = 'https://api.bing.microsoft.com/v7.0/search';
 
   // Common place name corrections for spell checking
   private static readonly PLACE_CORRECTIONS: { [key: string]: string } = {
@@ -121,6 +129,64 @@ export class ImageService {
     return suggestions.slice(0, 5);
   }
 
+  static async searchBingImages(query: string, count: number = 10): Promise<string[]> {
+    try {
+      const response = await fetch(
+        `${this.BING_IMAGE_SEARCH_URL}?q=${encodeURIComponent(query)}&count=${count}&imageType=Photo&size=Large`,
+        {
+          headers: {
+            'Ocp-Apim-Subscription-Key': this.BING_SEARCH_KEY,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`Bing Image API error: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      return data.value?.map((img: BingImageResult) => img.contentUrl) || [];
+    } catch (error) {
+      console.error('Error fetching images from Bing:', error);
+      return [];
+    }
+  }
+
+  static async searchBingWeb(query: string): Promise<{ description: string; longDescription: string }> {
+    try {
+      const response = await fetch(
+        `${this.BING_WEB_SEARCH_URL}?q=${encodeURIComponent(query + ' travel destination information')}&count=3`,
+        {
+          headers: {
+            'Ocp-Apim-Subscription-Key': this.BING_SEARCH_KEY,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`Bing Web API error: ${response.status}`);
+        return this.generateFallbackDescriptions(query);
+      }
+
+      const data = await response.json();
+      const webResults = data.webPages?.value || [];
+      
+      if (webResults.length > 0) {
+        const snippets = webResults.map((result: BingWebResult) => result.snippet).join(' ');
+        const description = webResults[0].snippet || this.generateDescription(query);
+        const longDescription = snippets.slice(0, 500) || this.generateLongDescription(query);
+        
+        return { description, longDescription };
+      }
+
+      return this.generateFallbackDescriptions(query);
+    } catch (error) {
+      console.error('Error fetching web results from Bing:', error);
+      return this.generateFallbackDescriptions(query);
+    }
+  }
+
   static async searchPlaces(query: string): Promise<SearchResult[]> {
     try {
       console.log('Original search query:', query);
@@ -129,67 +195,60 @@ export class ImageService {
       const correctedQuery = this.correctSpelling(query);
       console.log('Corrected query:', correctedQuery);
 
-      // Search for images using Unsplash
-      const searchTerms = `${correctedQuery} travel destination landscape`;
-      
-      const response = await fetch(
-        `${this.UNSPLASH_BASE_URL}?query=${encodeURIComponent(searchTerms)}&per_page=30&orientation=landscape&order_by=popular`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Client-ID ${this.UNSPLASH_ACCESS_KEY}`,
-            'Content-Type': 'application/json',
-          },
+      // Check if API key is configured
+      if (this.BING_SEARCH_KEY === 'YOUR_BING_API_KEY_HERE') {
+        console.warn('Bing API key not configured, using fallback data');
+        return this.generateFallbackResults(correctedQuery);
+      }
+
+      // Search for images and descriptions using Bing API
+      const imageSearchQueries = [
+        `${correctedQuery} travel destination landscape`,
+        `${correctedQuery} tourist attractions`,
+        `${correctedQuery} city view`,
+        `${correctedQuery} landmarks`,
+        `${correctedQuery} scenic views`,
+        `${correctedQuery} architecture`
+      ];
+
+      const results: SearchResult[] = [];
+
+      for (let i = 0; i < 6; i++) {
+        const searchQuery = imageSearchQueries[i % imageSearchQueries.length];
+        const images = await this.searchBingImages(searchQuery, 5);
+        const { description, longDescription } = await this.searchBingWeb(correctedQuery);
+
+        if (images.length > 0) {
+          results.push({
+            id: `bing-place-${i}`,
+            name: this.extractLocationName(correctedQuery, i),
+            country: this.extractCountryName(correctedQuery),
+            description: description,
+            longDescription: longDescription,
+            images: images,
+            category: this.categorizePlace(correctedQuery),
+            coordinates: {
+              lat: this.generateRandomCoordinate(-90, 90),
+              lng: this.generateRandomCoordinate(-180, 180),
+            },
+            bestTimeToVisit: this.generateBestTimeToVisit(),
+            attractions: this.generateAttractions(correctedQuery),
+          });
         }
-      );
-
-      if (!response.ok) {
-        console.error(`Unsplash API error: ${response.status}`);
-        return this.generateFallbackResults(correctedQuery);
       }
 
-      const data = await response.json();
-      console.log('Unsplash API response:', data);
-
-      if (!data.results || data.results.length === 0) {
-        console.log('No results found, generating fallback data');
-        return this.generateFallbackResults(correctedQuery);
-      }
-
-      // Group images and create places with multiple images each
-      const groupedResults: SearchResult[] = [];
-      const imagesPerPlace = 5;
-      const numberOfPlaces = Math.min(6, Math.ceil(data.results.length / imagesPerPlace));
-
-      for (let i = 0; i < numberOfPlaces; i++) {
-        const startIndex = i * imagesPerPlace;
-        const endIndex = Math.min(startIndex + imagesPerPlace, data.results.length);
-        const placeImages = data.results.slice(startIndex, endIndex);
-
-        const images = placeImages.map((img: any) => img.urls.regular);
-        
-        groupedResults.push({
-          id: `place-${i}`,
-          name: this.extractLocationName(correctedQuery, i),
-          country: this.extractCountryName(correctedQuery),
-          description: this.generateDescription(correctedQuery),
-          longDescription: this.generateLongDescription(correctedQuery),
-          images: images,
-          category: this.categorizePlace(correctedQuery),
-          coordinates: {
-            lat: this.generateRandomCoordinate(-90, 90),
-            lng: this.generateRandomCoordinate(-180, 180),
-          },
-          bestTimeToVisit: this.generateBestTimeToVisit(),
-          attractions: this.generateAttractions(correctedQuery),
-        });
-      }
-
-      return groupedResults;
+      return results.length > 0 ? results : this.generateFallbackResults(correctedQuery);
     } catch (error) {
-      console.error('Error searching places:', error);
+      console.error('Error searching places with Bing API:', error);
       return this.generateFallbackResults(query);
     }
+  }
+
+  private static generateFallbackDescriptions(query: string): { description: string; longDescription: string } {
+    return {
+      description: this.generateDescription(query),
+      longDescription: this.generateLongDescription(query)
+    };
   }
 
   private static generateFallbackResults(query: string): SearchResult[] {
